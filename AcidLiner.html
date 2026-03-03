@@ -1,0 +1,1307 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Acidliner — 303 MIDI Generator</title>
+  <style>
+    :root { --bg:#0b0c10; --panel:#12141b; --fg:#e8e8ea; --muted:#a8a9b0; --hi:#7df9ff; --ok:#7CFC00; --warn:#ffcc00; }
+    body { margin:0; font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--fg); }
+    .wrap { max-width:1200px; margin:0 auto; padding:18px; }
+    h1 { margin:0 0 10px; font-size:22px; letter-spacing:0.3px; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    .panel { background:var(--panel); border:1px solid #232633; border-radius:14px; padding:14px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:10px; }
+    .field { grid-column: span 4; }
+    .field.sm { grid-column: span 3; }
+    .field.lg { grid-column: span 6; }
+    label { display:block; font-size:12px; color:var(--muted); margin:0 0 6px; }
+    select, input[type="number"], input[type="text"] {
+      width:100%; box-sizing:border-box; padding:9px 10px; border-radius:10px;
+      border:1px solid #2b2f3f; background:#0f1118; color:var(--fg);
+    }
+    input[type="range"] { width:100%; }
+    .btns { display:flex; flex-wrap:wrap; gap:10px; }
+    button {
+      padding:10px 12px; border-radius:12px; border:1px solid #2b2f3f;
+      background:#0f1118; color:var(--fg); cursor:pointer;
+    }
+    button:hover { border-color:#3a4160; }
+    button.primary { background: #0f1c1e; border-color:#1b6b70; }
+    button.primary:hover { border-color: var(--hi); }
+    button.good { background:#0f1a10; border-color:#265a2c; }
+    button.good:hover { border-color: var(--ok); }
+    button.warn { background:#1a140f; border-color:#5a4526; }
+    button.warn:hover { border-color: var(--warn); }
+    .tiny { font-size:12px; color:var(--muted); line-height:1.3; }
+    .split { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+    .toggles { display:flex; gap:12px; flex-wrap:wrap; }
+    .toggle { display:flex; align-items:center; gap:8px; font-size:12px; color:var(--muted); }
+    .toggle input { transform: translateY(1px); }
+    details { margin-top:10px; }
+    details summary { cursor:pointer; color:var(--hi); user-select:none; }
+    .candList { margin-top:10px; display:grid; grid-template-columns: 1fr; gap:10px; }
+    .cand { border:1px solid #232633; border-radius:12px; padding:10px; background:#0f1118; }
+    .cand .top { display:flex; justify-content:space-between; gap:10px; align-items:center; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .pill { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #2b2f3f; color:var(--muted); font-size:12px; }
+    pre.grid16 { margin:10px 0 0; padding:10px; border:1px solid #232633; border-radius:12px; background:#0b0c10; overflow:auto; }
+    .ok { color: var(--ok); }
+    .warnTxt { color: var(--warn); }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Acidliner — 303 MIDI Generator</h1>
+
+  <div class="row">
+    <div class="panel">
+      <div class="grid">
+        <div class="field lg">
+          <label>Style DNA</label>
+          <select id="styleDNA"></select>
+        </div>
+        <div class="field lg">
+          <label>Rhythm DNA</label>
+          <select id="rhythmDNA"></select>
+        </div>
+
+        <div class="field sm">
+          <label>Key</label>
+          <select id="key"></select>
+        </div>
+        <div class="field sm">
+          <label>Scale/Mode</label>
+          <select id="scale"></select>
+        </div>
+        <div class="field sm">
+          <label>Tempo (BPM)</label>
+          <input id="tempo" type="number" min="60" max="220" value="130" />
+        </div>
+        <div class="field sm">
+          <label>Bars (Loop)</label>
+          <select id="bars">
+            <option value="1">1 bar (16 steps)</option>
+            <option value="2">2 bars (32 steps)</option>
+          </select>
+        </div>
+
+        <div class="field lg">
+          <label>Vary % (keeps DNA vibe, changes details)</label>
+          <input id="vary" type="range" min="0" max="100" value="35" />
+          <div class="split"><span class="tiny">Tame</span><span class="tiny mono" id="varyVal">35%</span><span class="tiny">Wild</span></div>
+        </div>
+
+        <div class="field lg">
+          <label>Swing (delay odd 16ths)</label>
+          <input id="swing" type="range" min="0" max="60" value="12" />
+          <div class="split"><span class="tiny">0%</span><span class="tiny mono" id="swingVal">12%</span><span class="tiny">60%</span></div>
+        </div>
+
+        <div class="field sm">
+          <label>Seed (optional)</label>
+          <input id="seed" type="text" placeholder="leave blank for random" />
+        </div>
+        <div class="field sm">
+          <label>Generate tries (quality filter)</label>
+          <input id="tries" type="number" min="50" max="4000" value="500" />
+        </div>
+        <div class="field sm">
+          <label>Candidate count</label>
+          <input id="candCount" type="number" min="3" max="20" value="10" />
+        </div>
+        <div class="field sm">
+          <label>Slide overlap (ms)</label>
+          <input id="slideMs" type="number" min="5" max="120" value="35" />
+        </div>
+
+        <div class="field lg">
+          <label>Locks (freeze parts while regenerating)</label>
+          <div class="toggles">
+            <label class="toggle"><input type="checkbox" id="lockKey"> Key/Scale</label>
+            <label class="toggle"><input type="checkbox" id="lockRhythm"> Rhythm</label>
+            <label class="toggle"><input type="checkbox" id="lockNotes"> Notes</label>
+            <label class="toggle"><input type="checkbox" id="lockMotif"> Motif</label>
+            <label class="toggle"><input type="checkbox" id="lockAccents"> Accents</label>
+            <label class="toggle"><input type="checkbox" id="lockSlides"> Slides</label>
+            <label class="toggle"><input type="checkbox" id="lockTies"> Ties</label>
+          </div>
+        </div>
+
+        <div class="field lg">
+          <label>Actions</label>
+          <div class="btns">
+            <button class="primary" id="genBtn">Generate Candidates</button>
+            <button id="stopBtn">Stop Preview</button>
+            <button class="good" id="dlLoopBtn" disabled>Download Loop MIDI</button>
+            <button class="good" id="dlPhraseBtn" disabled>Download 8-bar Phrase MIDI</button>
+            <button class="warn" id="dlZipBtn" disabled>Download ZIP (candidates)</button>
+          </div>
+          <div class="tiny" id="zipNote"></div>
+        </div>
+      </div>
+
+      <details>
+        <summary>Advanced controls</summary>
+        <div class="grid" style="margin-top:10px;">
+          <div class="field sm">
+            <label>Note pool max (distinct pitches)</label>
+            <input id="notePoolMax" type="number" min="3" max="10" value="6" />
+          </div>
+          <div class="field sm">
+            <label>Octave range (octaves)</label>
+            <input id="octRange" type="number" min="1" max="3" value="2" />
+          </div>
+          <div class="field sm">
+            <label>Octave jump %</label>
+            <input id="octJump" type="number" min="0" max="60" value="18" />
+          </div>
+          <div class="field sm">
+            <label>Root gravity %</label>
+            <input id="rootGrav" type="number" min="0" max="80" value="28" />
+          </div>
+
+          <div class="field sm">
+            <label>Accent density %</label>
+            <input id="accDen" type="number" min="0" max="80" value="28" />
+          </div>
+          <div class="field sm">
+            <label>Slide density %</label>
+            <input id="sldDen" type="number" min="0" max="80" value="22" />
+          </div>
+          <div class="field sm">
+            <label>Accent↔Slide coupling %</label>
+            <input id="couple" type="number" min="0" max="100" value="45" />
+          </div>
+          <div class="field sm">
+            <label>Gate style</label>
+            <select id="gateStyle">
+              <option value="tight">Tight (gated)</option>
+              <option value="mid" selected>Mid</option>
+              <option value="leggy">Leggy (longer)</option>
+            </select>
+          </div>
+
+          <div class="field lg">
+            <label>Ties</label>
+            <div class="toggles">
+              <label class="toggle"><input type="radio" name="tieMode" value="auto" checked> Auto (from Rhythm DNA)</label>
+              <label class="toggle"><input type="radio" name="tieMode" value="manual"> Manual (Tie density)</label>
+            </div>
+            <div style="margin-top:8px;">
+              <label class="tiny">Tie density % (manual)</label>
+              <input id="tieDen" type="range" min="0" max="70" value="18" />
+              <div class="split"><span class="tiny">0%</span><span class="tiny mono" id="tieDenVal">18%</span><span class="tiny">70%</span></div>
+            </div>
+          </div>
+
+          <div class="field lg">
+            <label>Motif</label>
+            <div class="grid">
+              <div class="field sm">
+                <label>Motif length (notes)</label>
+                <input id="motifLen" type="number" min="2" max="6" value="4" />
+              </div>
+              <div class="field sm">
+                <label>Motif repeats per bar</label>
+                <input id="motifRep" type="number" min="1" max="6" value="3" />
+              </div>
+              <div class="field sm">
+                <label>Motif variation %</label>
+                <input id="motifVar" type="number" min="0" max="80" value="28" />
+              </div>
+              <div class="field sm">
+                <label>Cadence bias %</label>
+                <input id="cadBias" type="number" min="0" max="80" value="26" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <div class="panel">
+      <div class="split" style="margin-bottom:10px;">
+        <div>
+          <div class="pill">Preview</div>
+          <div class="tiny">
+            Click <span class="mono">Play</span>. If you hear nothing: check Windows volume mixer and that the tab isn’t muted.
+          </div>
+        </div>
+        <div class="pill mono" id="status">Idle</div>
+      </div>
+
+      <div class="tiny">
+        <span class="ok">TD-3 mapping:</span> Accent = velocity. Slide = overlap by “Slide overlap ms”. Tie = longer note (no retrigger).
+      </div>
+
+      <pre class="grid16 mono" id="gridOut">Generate candidates to see a step grid here.</pre>
+
+      <div class="candList" id="candList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ZIP support for hosted use (optional). If blocked/offline, ZIP button disables cleanly. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+/* --------------------------- Utilities: PRNG --------------------------- */
+function xmur3(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i=0; i<str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return function() {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return (h ^= h >>> 16) >>> 0;
+  }
+}
+function mulberry32(a) {
+  return function() {
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+}
+function randInt(rng, min, max) { return Math.floor(rng() * (max - min + 1)) + min; }
+function choice(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+function clamp(n, a, b) { return Math.max(a, Math.min(b, n)); }
+const el = (id) => document.getElementById(id);
+
+/* ------------------------ Musical: scales & keys ------------------------ */
+const NOTE_NAMES = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const KEYS = NOTE_NAMES.slice();
+const SCALES = {
+  "Minor (Aeolian)": [0,2,3,5,7,8,10],
+  "Dorian": [0,2,3,5,7,9,10],
+  "Phrygian": [0,1,3,5,7,8,10],
+  "Mixolydian": [0,2,4,5,7,9,10],
+  "Harmonic Minor": [0,2,3,5,7,8,11],
+  "Blues": [0,3,5,6,7,10],
+  "Minor Pentatonic": [0,3,5,7,10],
+  "Chromatic (acid)": [0,1,2,3,4,5,6,7,8,9,10,11]
+};
+
+/* ------------------------------ DNA Presets ----------------------------- */
+const STYLE_DNA = {
+  "Chicago Minimal": { noteDensity: 42, accDen: 18, sldDen: 14, couple: 38, rootGrav: 38, octJump: 10, notePoolMax: 5, motifVar: 18, cadBias: 34 },
+  "Jackin’ Acid": { noteDensity: 58, accDen: 24, sldDen: 20, couple: 42, rootGrav: 32, octJump: 14, notePoolMax: 6, motifVar: 22, cadBias: 28 },
+  "UK Rave Bite": { noteDensity: 62, accDen: 36, sldDen: 24, couple: 55, rootGrav: 24, octJump: 22, notePoolMax: 7, motifVar: 30, cadBias: 22 },
+  "Trance-lean Acid": { noteDensity: 56, accDen: 28, sldDen: 26, couple: 48, rootGrav: 26, octJump: 18, notePoolMax: 7, motifVar: 34, cadBias: 40 },
+  "Hardfloor Roller": { noteDensity: 70, accDen: 32, sldDen: 34, couple: 58, rootGrav: 20, octJump: 26, notePoolMax: 7, motifVar: 24, cadBias: 18 },
+  "Dark Acid Techno": { noteDensity: 58, accDen: 34, sldDen: 26, couple: 60, rootGrav: 18, octJump: 18, notePoolMax: 6, motifVar: 26, cadBias: 16 },
+  "Electro Acid": { noteDensity: 50, accDen: 22, sldDen: 18, couple: 40, rootGrav: 30, octJump: 16, notePoolMax: 6, motifVar: 26, cadBias: 26 },
+  "Breakbeat Acid": { noteDensity: 52, accDen: 30, sldDen: 22, couple: 44, rootGrav: 22, octJump: 20, notePoolMax: 7, motifVar: 36, cadBias: 24 },
+  "Industrial Acid": { noteDensity: 64, accDen: 40, sldDen: 20, couple: 62, rootGrav: 16, octJump: 14, notePoolMax: 6, motifVar: 18, cadBias: 14 },
+  "Squidgy Funk": { noteDensity: 54, accDen: 26, sldDen: 30, couple: 52, rootGrav: 28, octJump: 24, notePoolMax: 6, motifVar: 30, cadBias: 30 }
+};
+
+const RHYTHM_DNA = {
+  "Straight 16s Driver": { restBias: 18, tieBias: 16, syncopation: 10, cadence: 22, clusters: 18, dotted: 0 },
+  "Sparse Punch": { restBias: 40, tieBias: 12, syncopation: 18, cadence: 26, clusters: 10, dotted: 0 },
+  "Offbeat 8ths": { restBias: 28, tieBias: 10, syncopation: 26, cadence: 22, clusters: 16, dotted: 0 },
+  "Syncopated Stabs": { restBias: 32, tieBias: 10, syncopation: 38, cadence: 18, clusters: 20, dotted: 0 },
+  "Dotted-8 Gallop": { restBias: 24, tieBias: 22, syncopation: 20, cadence: 20, clusters: 16, dotted: 65 },
+  "Dotted-16 Twitch": { restBias: 26, tieBias: 18, syncopation: 34, cadence: 18, clusters: 22, dotted: 45 },
+  "Call/Response Bars": { restBias: 28, tieBias: 16, syncopation: 22, cadence: 34, clusters: 14, dotted: 0 },
+  "Late-Beat Push": { restBias: 24, tieBias: 14, syncopation: 24, cadence: 26, clusters: 18, dotted: 0 },
+  "Run-up Cadence": { restBias: 22, tieBias: 18, syncopation: 18, cadence: 48, clusters: 22, dotted: 0 },
+  "Stop/Start Gating": { restBias: 34, tieBias: 28, syncopation: 20, cadence: 22, clusters: 36, dotted: 10 }
+};
+
+/* --------------------------- UI Initialization -------------------------- */
+function fillSelect(sel, values) {
+  sel.innerHTML = "";
+  for (const v of values) {
+    const o = document.createElement("option");
+    o.value = v; o.textContent = v;
+    sel.appendChild(o);
+  }
+}
+fillSelect(el("styleDNA"), Object.keys(STYLE_DNA));
+fillSelect(el("rhythmDNA"), Object.keys(RHYTHM_DNA));
+fillSelect(el("key"), KEYS);
+fillSelect(el("scale"), Object.keys(SCALES));
+
+el("styleDNA").value = "UK Rave Bite";
+el("rhythmDNA").value = "Straight 16s Driver";
+el("key").value = "A";
+el("scale").value = "Minor (Aeolian)";
+
+function syncRangeLabels() {
+  el("varyVal").textContent = `${el("vary").value}%`;
+  el("swingVal").textContent = `${el("swing").value}%`;
+  el("tieDenVal").textContent = `${el("tieDen").value}%`;
+}
+["vary","swing","tieDen"].forEach(id => el(id).addEventListener("input", syncRangeLabels));
+syncRangeLabels();
+
+/* ------------------------------ Vary % logic ---------------------------- */
+function applyVary(rng, base, varyPct) {
+  const v = varyPct / 100;
+  const out = JSON.parse(JSON.stringify(base));
+  for (const k of Object.keys(out)) {
+    if (typeof out[k] !== "number") continue;
+    const amt = out[k] * (0.15 + 0.85 * v);
+    const delta = (rng() * 2 - 1) * amt * v;
+    out[k] = out[k] + delta;
+  }
+  return out;
+}
+function clampStyle(s) {
+  const c = {...s};
+  c.noteDensity = clamp(c.noteDensity, 25, 78);
+  c.accDen = clamp(c.accDen, 0, 65);
+  c.sldDen = clamp(c.sldDen, 0, 65);
+  c.couple = clamp(c.couple, 0, 100);
+  c.rootGrav = clamp(c.rootGrav, 0, 70);
+  c.octJump = clamp(c.octJump, 0, 50);
+  c.notePoolMax = clamp(Math.round(c.notePoolMax), 3, 10);
+  c.motifVar = clamp(c.motifVar, 0, 70);
+  c.cadBias = clamp(c.cadBias, 0, 70);
+  return c;
+}
+function clampRhythm(r) {
+  const c = {...r};
+  c.restBias = clamp(c.restBias, 10, 55);
+  c.tieBias = clamp(c.tieBias, 0, 45);
+  c.syncopation = clamp(c.syncopation, 0, 60);
+  c.cadence = clamp(c.cadence, 0, 60);
+  c.clusters = clamp(c.clusters, 0, 60);
+  c.dotted = clamp(c.dotted, 0, 80);
+  return c;
+}
+function weightedPick(rng, items) {
+  let sum = 0;
+  for (const it of items) sum += it.w;
+  let t = rng() * sum;
+  for (const it of items) {
+    t -= it.w;
+    if (t <= 0) return it.v;
+  }
+  return items[items.length-1].v;
+}
+
+/* ------------------------- Generation helpers --------------------------- */
+function buildNotePool(keyName, scaleName, octRange, baseOct=3) {
+  const scale = SCALES[scaleName];
+  const key = NOTE_NAMES.indexOf(keyName);
+  const pool = [];
+  for (let o = 0; o < octRange; o++) {
+    const octave = baseOct + o;
+    for (let i=0; i<scale.length; i++) {
+      pool.push(12*(octave+1) + key + scale[i]);
+    }
+  }
+  return pool;
+}
+
+function makeMotif(rng, pool, motifLen, notePoolMax, rootNote, rootGravPct) {
+  const unique = new Set();
+  unique.add(rootNote);
+  while (unique.size < Math.min(notePoolMax, pool.length)) unique.add(choice(rng, pool));
+  const smallPool = Array.from(unique);
+
+  const motif = [];
+  let prev = rootNote;
+  for (let i=0; i<motifLen; i++) {
+    let pick;
+    if (rng()*100 < rootGravPct) pick = rootNote;
+    else {
+      const candidates = smallPool.map(n => ({ n, d: Math.abs(n - prev) })).sort((a,b)=>a.d-b.d);
+      const near = candidates.slice(0, Math.min(4, candidates.length)).map(x=>x.n);
+      const mid  = candidates.slice(4, Math.min(8, candidates.length)).map(x=>x.n);
+      pick = weightedPick(rng, [
+        {v: choice(rng, near.length?near:smallPool), w: 7},
+        {v: choice(rng, mid.length?mid:smallPool), w: 3},
+        {v: choice(rng, smallPool), w: 1},
+      ]);
+    }
+    motif.push(pick);
+    prev = pick;
+  }
+  return { motif, smallPool };
+}
+
+function getTieMode() {
+  const radios = document.querySelectorAll('input[name="tieMode"]');
+  for (const r of radios) if (r.checked) return r.value;
+  return "auto";
+}
+
+function makeRhythmMask(rng, steps, style, rhythm, bars, tieMode, manualTieDen, lockRhythm=false, lockedMask=null) {
+  if (lockRhythm && lockedMask) return lockedMask.slice();
+
+  const mask = Array(steps).fill("rest"); // rest | note | tie
+  const perBar = 16;
+  const cadenceBoost = rhythm.cadence / 100;
+
+  const targetNotesPerBar = Math.round((style.noteDensity/100) * perBar);
+  const restBias = rhythm.restBias / 100;
+  const sync = rhythm.syncopation / 100;
+  const cluster = rhythm.clusters / 100;
+  const dotted = rhythm.dotted / 100;
+
+  function stepWeight(i) {
+    const s = i % 16;
+    const down = (s===0||s===4||s===8||s===12) ? 1.2 : 1.0;
+    const off  = (s===2||s===6||s===10||s===14) ? 1.1 : 1.0;
+    const syncW = 1.0 + (sync * (((s%4)===0) ? -0.25 : 0.15));
+    const cad   = (s>=12) ? (1.0 + cadenceBoost*0.8) : 1.0;
+    const dottedW = 1.0 + dotted * ((s===0||s===3||s===8||s===11||s===12||s===15) ? 0.35 : -0.08);
+    return Math.max(0.05, down*off*syncW*cad*dottedW);
+  }
+
+  for (let b=0; b<bars; b++) {
+    const start = b*16;
+    const positions = [];
+    for (let k=0; k<16; k++) positions.push({ idx:start+k, w:stepWeight(start+k) });
+
+    let placed = 0;
+    while (placed < targetNotesPerBar) {
+      if (rng() < restBias) { placed++; continue; }
+      const pick = weightedPick(rng, positions.map(p=>({v:p.idx,w:p.w})));
+      if (mask[pick] === "note") continue;
+      mask[pick] = "note";
+      placed++;
+
+      if (cluster > 0 && rng() < cluster) {
+        const neigh = [pick-1, pick+1].filter(x => x>=start && x<start+16);
+        for (const n of neigh) if (rng() < 0.45 && mask[n] === "rest") mask[n] = "note";
+      }
+    }
+    if (rng() < 0.75 && mask[start] === "rest") mask[start] = "note";
+  }
+
+  const tiePct = (tieMode === "manual") ? (manualTieDen/100) : (rhythm.tieBias/100);
+  for (let i=1; i<steps; i++) {
+    if (mask[i] !== "note") continue;
+    if (mask[i-1] === "note" || mask[i-1] === "tie") {
+      if (rng() < tiePct) mask[i] = "tie";
+    }
+  }
+  for (let b=0; b<bars; b++) {
+    const s = b*16;
+    if (mask[s] === "tie") mask[s] = "note";
+  }
+  return mask;
+}
+
+function placePitches(rng, steps, mask, motifObj, motifRep, motifVarPct, rootNote, rootGravPct, octJumpPct, octRange, lockNotes=false, lockedPitches=null) {
+  if (lockNotes && lockedPitches) return lockedPitches.slice();
+
+  const pitches = Array(steps).fill(null);
+  const motif = motifObj.motif.slice();
+  const smallPool = motifObj.smallPool.slice();
+  const startsPerBar = clamp(motifRep, 1, 6);
+  const bars = Math.ceil(steps/16);
+  const candidateStarts = [0,2,4,6,8,10,12];
+  const varProb = motifVarPct / 100;
+  const octProb = octJumpPct / 100;
+
+  for (let b=0; b<bars; b++) {
+    const barStart = b*16;
+
+    const starts = [];
+    while (starts.length < startsPerBar) {
+      const s = barStart + choice(rng, candidateStarts);
+      if (s < barStart+16 && !starts.includes(s)) starts.push(s);
+    }
+    starts.sort((a,b)=>a-b);
+
+    for (const st of starts) {
+      for (let i=0; i<motif.length; i++) {
+        const idx = st+i;
+        if (idx >= barStart+16 || idx >= steps) break;
+        if (mask[idx] !== "note") continue;
+
+        let p = motif[i];
+
+        if (rng() < varProb) {
+          if (rng()*100 < rootGravPct) p = rootNote;
+          else {
+            const prev = (idx>0 && pitches[idx-1]) ? pitches[idx-1] : p;
+            const candidates = smallPool.map(n => ({ n, d: Math.abs(n - prev) })).sort((a,b)=>a.d-b.d);
+            const near = candidates.slice(0, Math.min(4, candidates.length)).map(x=>x.n);
+            p = choice(rng, near.length?near:smallPool);
+          }
+        }
+        if (rng() < octProb) p += 12 * (rng() < 0.5 ? -1 : 1);
+
+        pitches[idx] = p;
+      }
+    }
+
+    for (let i=barStart; i<barStart+16 && i<steps; i++) {
+      if (mask[i] !== "note") continue;
+      if (pitches[i] != null) continue;
+
+      const prev = (i>0 && pitches[i-1]!=null) ? pitches[i-1] : rootNote;
+      const candidates = smallPool.map(n => ({ n, d: Math.abs(n - prev) })).sort((a,b)=>a.d-b.d);
+      const near = candidates.slice(0, Math.min(4, candidates.length)).map(x=>x.n);
+      const mid  = candidates.slice(4, Math.min(8, candidates.length)).map(x=>x.n);
+      pitches[i] = weightedPick(rng, [
+        {v: choice(rng, near.length?near:smallPool), w: 7},
+        {v: choice(rng, mid.length?mid:smallPool), w: 3},
+        {v: choice(rng, smallPool), w: 1},
+      ]);
+    }
+  }
+
+  const minN = rootNote - 12;
+  const maxN = rootNote + 12*(octRange);
+  for (let i=0; i<steps; i++) {
+    if (pitches[i] == null) continue;
+    while (pitches[i] < minN) pitches[i] += 12;
+    while (pitches[i] > maxN) pitches[i] -= 12;
+  }
+  return pitches;
+}
+
+function addAccentsSlides(rng, steps, mask, pitches, accDen, sldDen, couple, lockAcc=false, lockSld=false, frozen=null) {
+  const out = {
+    accents: (lockAcc && frozen?.accents) ? frozen.accents.slice() : Array(steps).fill(false),
+    slides:  (lockSld && frozen?.slides)  ? frozen.slides.slice()  : Array(steps).fill(false),
+  };
+  function prevNoteIndex(i){
+    for (let j=i-1; j>=0; j--) if (mask[j]==="note") return j;
+    return -1;
+  }
+
+  if (!lockAcc) {
+    for (let i=0; i<steps; i++) {
+      if (mask[i] !== "note") continue;
+      const s = i % 16;
+      const beatish = (s===0||s===4||s===8||s===12) ? 1.2 : 1.0;
+      const sync = (s===3||s===7||s===11||s===15) ? 1.15 : 1.0;
+      const w = (accDen/100) * beatish * sync;
+      if (rng() < w) out.accents[i] = true;
+    }
+    if (!out.accents.some(Boolean)) {
+      for (let i=0;i<steps;i++) if (mask[i]==="note") { out.accents[i]=true; break; }
+    }
+  }
+
+  if (!lockSld) {
+    for (let i=1; i<steps; i++) {
+      if (mask[i] !== "note") continue;
+      const j = prevNoteIndex(i);
+      if (j < 0) continue;
+
+      const interval = Math.abs((pitches[i]??0) - (pitches[j]??0));
+      const intervalW = interval<=3 ? 1.3 : (interval<=7 ? 1.0 : 0.6);
+      let w = (sldDen/100) * intervalW;
+
+      if (out.accents[i] && rng()*100 < couple) w *= 1.6;
+      if ((i % 16) === 0) w *= 1.25;
+
+      if (rng() < w) out.slides[i] = true;
+    }
+    for (let i=1;i<steps;i++){
+      if (!out.slides[i]) continue;
+      const j = i-1;
+      if (mask[j]==="note" && pitches[j]===pitches[i] && rng()<0.5) out.slides[i]=false;
+    }
+  }
+
+  return out;
+}
+
+function scorePattern(steps, mask, pitches, accents, slides) {
+  let score = 0;
+  const notes = [];
+  for (let i=0;i<steps;i++) if (mask[i]==="note" && pitches[i]!=null) notes.push(pitches[i]);
+  const unique = new Set(notes);
+  const accCount = accents.filter(Boolean).length;
+  const sldCount = slides.filter(Boolean).length;
+  const tieCount = mask.filter(x=>x==="tie").length;
+  const restCount = mask.filter(x=>x==="rest").length;
+
+  const uniq = unique.size;
+  score += clamp(12 - uniq, -4, 10) * 2;
+
+  const noteDensity = notes.length / steps;
+  score += (1 - Math.abs(noteDensity - 0.55)) * 18;
+
+  score += (1 - Math.abs((accCount/Math.max(1,notes.length)) - 0.35)) * 10;
+  score += (1 - Math.abs((sldCount/Math.max(1,notes.length)) - 0.25)) * 10;
+
+  score += (1 - Math.abs((tieCount/steps) - 0.12)) * 8;
+
+  let bigLeaps=0, intervalSum=0, intervalCount=0;
+  for (let i=1;i<steps;i++){
+    if (mask[i]!=="note") continue;
+    let j=i-1; while (j>=0 && mask[j]!=="note") j--;
+    if (j<0) continue;
+    const d = Math.abs(pitches[i]-pitches[j]);
+    intervalSum += d; intervalCount++;
+    if (d>=10) bigLeaps++;
+  }
+  if (intervalCount>0){
+    const avg = intervalSum/intervalCount;
+    score += (1 - Math.abs(avg-4)/10) * 10;
+  }
+  score -= bigLeaps * 1.6;
+
+  score -= Math.max(0, restCount - steps*0.45) * 0.25;
+  return score;
+}
+
+/* ----------------------------- Text Step Grid --------------------------- */
+function midiName(n) {
+  const name = NOTE_NAMES[n % 12];
+  const oct = Math.floor(n/12) - 1;
+  return name + oct;
+}
+function renderStepGrid(pat, bars) {
+  const steps = pat.mask.length;
+  const lines = [];
+  for (let b=0; b<bars; b++) {
+    const start = b*16;
+    const head = `Bar ${b+1} (steps ${start+1}-${start+16})`;
+    const idxs = [];
+    const row  = [];
+    const notes= [];
+    const as   = [];
+    for (let i=0;i<16;i++){
+      const s = start+i;
+      idxs.push(String(i+1).padStart(2,"0"));
+      const m = pat.mask[s];
+      if (m==="rest") row.push("..");
+      else if (m==="tie") row.push("==");
+      else row.push("[]");
+
+      if (m==="note" && pat.pitches[s]!=null) notes.push(midiName(pat.pitches[s]).padStart(3," "));
+      else if (m==="tie") notes.push(" - ");
+      else notes.push(" . ");
+
+      const a = pat.accents[s] ? "A" : ".";
+      const sl = pat.slides[s] ? "S" : ".";
+      as.push(a+sl);
+    }
+    lines.push(head);
+    lines.push("Step : " + idxs.join(" "));
+    lines.push("Mask : " + row.join(" "));
+    lines.push("Note : " + notes.join(" "));
+    lines.push("A/S  : " + as.join(" "));
+    lines.push("");
+  }
+  return lines.join("\n");
+}
+
+/* ----------------------------- WebAudio preview ------------------------- */
+let audioCtx = null;
+let previewNodes = [];
+function ensureAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function stopPreview() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  for (const n of previewNodes) {
+    try { n.gain.gain.setTargetAtTime(0.0001, now, 0.01); } catch {}
+    try { n.osc.stop(now + 0.05); } catch {}
+  }
+  previewNodes = [];
+  el("status").textContent = "Stopped";
+}
+function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+
+function playPreview(pat, tempoBpm, swingPct, slideMs) {
+  ensureAudio();
+  audioCtx.resume(); // required in Chrome if context is suspended
+  stopPreview();
+
+  const stepSec = (60 / tempoBpm) / 4;
+  const swing = clamp(swingPct/100, 0, 0.6);
+  const slideSec = slideMs / 1000;
+  const now = audioCtx.currentTime + 0.03;
+
+  // Very simple “303-ish”: saw -> lowpass -> gain, per-note nodes (reliable scheduling)
+  for (let i=0;i<pat.mask.length;i++){
+    const typ = pat.mask[i];
+    const isOff = (i%2)===1;
+    const t0 = now + i*stepSec + (isOff ? stepSec*swing : 0);
+    const t1 = now + (i+1)*stepSec + (((i+1)%2)===1 ? stepSec*swing : 0);
+
+    if (typ !== "note") continue;
+    const n = pat.pitches[i];
+    if (n == null) continue;
+
+    const osc = audioCtx.createOscillator();
+    osc.type = "sawtooth";
+
+    const filt = audioCtx.createBiquadFilter();
+    filt.type = "lowpass";
+    filt.Q.value = 0.9;
+
+    const gain = audioCtx.createGain();
+    gain.gain.value = 0.0001;
+
+    osc.connect(filt);
+    filt.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const isAcc = !!pat.accents[i];
+    const amp = isAcc ? 0.18 : 0.12;
+    const cut = isAcc ? 1400 : 900;
+
+    // “Slide” preview: if slide flag, ramp quickly from previous pitch (if previous was note)
+    let f0 = midiToFreq(n);
+    if (pat.slides[i]) {
+      let j=i-1;
+      while (j>=0 && pat.mask[j]!=="note") j--;
+      if (j>=0 && pat.pitches[j]!=null) {
+        const prevF = midiToFreq(pat.pitches[j]);
+        osc.frequency.setValueAtTime(prevF, t0);
+        osc.frequency.linearRampToValueAtTime(f0, t0 + Math.max(0.01, slideSec));
+      } else {
+        osc.frequency.setValueAtTime(f0, t0);
+      }
+    } else {
+      osc.frequency.setValueAtTime(f0, t0);
+    }
+
+    filt.frequency.setValueAtTime(cut, t0);
+
+    // quick amp env
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.linearRampToValueAtTime(amp, t0 + 0.01);
+    gain.gain.setTargetAtTime(0.0001, t0 + stepSec*0.65, 0.06);
+
+    osc.start(t0);
+    osc.stop(Math.max(t0 + 0.05, t1 + 0.02));
+
+    previewNodes.push({osc, gain});
+  }
+
+  el("status").textContent = "Playing";
+  setTimeout(()=>{ el("status").textContent = "Idle"; }, Math.ceil((pat.mask.length*stepSec + 0.2)*1000));
+}
+
+/* ------------------------------- MIDI writer ---------------------------- */
+/*
+  Ableton-safe: Standard MIDI File Type 1, one track.
+  PPQ=480. We write tempo meta, then note events.
+*/
+
+function u16be(n){ return new Uint8Array([(n>>8)&255, n&255]); }
+function u32be(n){ return new Uint8Array([(n>>24)&255,(n>>16)&255,(n>>8)&255,n&255]); }
+function ascii(s){ return new Uint8Array([...s].map(c=>c.charCodeAt(0))); }
+function cat(...arrs){
+  const len = arrs.reduce((a,b)=>a+b.length,0);
+  const out = new Uint8Array(len);
+  let o=0; for (const a of arrs){ out.set(a,o); o+=a.length; }
+  return out;
+}
+function vlq(n){
+  let v = n >>> 0;
+  const bytes = [v & 0x7F];
+  v >>>= 7;
+  while (v > 0){
+    bytes.push((v & 0x7F) | 0x80);
+    v >>>= 7;
+  }
+  bytes.reverse();
+  return new Uint8Array(bytes);
+}
+
+function buildMidiType1(noteOnsOffs, tempoBpm, ppq=480){
+  // noteOnsOffs: [{t, bytes:Uint8Array}]
+  const mpqn = Math.round(60000000 / tempoBpm);
+  const tempo = new Uint8Array([0xFF,0x51,0x03, (mpqn>>16)&255, (mpqn>>8)&255, mpqn&255]);
+  const eot   = new Uint8Array([0xFF,0x2F,0x00]);
+
+  const events = [
+    {t:0, bytes: tempo},
+    // Track name (helps some DAWs)
+    {t:0, bytes: cat(new Uint8Array([0xFF,0x03,0x08]), ascii("Acidline"))},
+    ...noteOnsOffs
+  ];
+
+  // Sort by time; if same tick, note-off after note-on.
+  events.sort((a,b)=>{
+    if (a.t !== b.t) return a.t - b.t;
+    const a0 = a.bytes[0], b0 = b.bytes[0];
+    const aIsOff = (a0 === 0x80) || (a0 === 0x90 && a.bytes[2]===0);
+    const bIsOff = (b0 === 0x80) || (b0 === 0x90 && b.bytes[2]===0);
+    if (aIsOff === bIsOff) return 0;
+    return aIsOff ? 1 : -1; // offs later
+  });
+
+  let last = 0;
+  const chunks = [];
+  for (const ev of events){
+    const d = ev.t - last;
+    last = ev.t;
+    chunks.push(vlq(d), ev.bytes);
+  }
+  chunks.push(vlq(0), eot);
+
+  const trackData = cat(...chunks);
+  const track = cat(ascii("MTrk"), u32be(trackData.length), trackData);
+
+  const header = cat(
+    ascii("MThd"),
+    u32be(6),
+    u16be(1),   // format 1
+    u16be(1),   // 1 track
+    u16be(ppq)
+  );
+
+  return cat(header, track);
+}
+
+function stepsToMidiEvents(pat, tempoBpm, swingPct, slideMs, gateStyle){
+  const ppq = 480;
+  const stepTicks = ppq / 4; // 16th = 120 ticks
+  const swing = clamp(swingPct/100, 0, 0.6);
+  const msPerTick = (60000 / tempoBpm) / ppq;
+  const overlapTicks = Math.max(1, Math.round(slideMs / msPerTick));
+
+  let gateFrac = 0.72;
+  if (gateStyle === "tight") gateFrac = 0.58;
+  if (gateStyle === "leggy") gateFrac = 0.86;
+
+  function stepStartTick(i){
+    const base = i * stepTicks;
+    const isOff = (i%2)===1;
+    return Math.round(base + (isOff ? stepTicks*swing : 0));
+  }
+
+  // Build consolidated notes (ties become longer notes)
+  const notes = []; // {startTick, endTick, pitch, vel}
+  let i=0;
+  while (i < pat.mask.length){
+    if (pat.mask[i] !== "note"){ i++; continue; }
+
+    const pitch = pat.pitches[i];
+    if (pitch == null){ i++; continue; }
+
+    const vel = pat.accents[i] ? 118 : 84;
+    let start = stepStartTick(i);
+
+    // end time: if next steps are ties, extend; else use gateFrac
+    let endStep = i+1;
+    while (endStep < pat.mask.length && pat.mask[endStep] === "tie") endStep++;
+    const endBoundary = (endStep < pat.mask.length) ? stepStartTick(endStep) : (pat.mask.length * stepTicks);
+
+    let end = start + Math.round((endBoundary - start) * gateFrac);
+
+    // slide overlap rule: if next *note* has slide flag, extend THIS note past next start
+    // That is: slide flag lives on the destination step (classic logic).
+    // So we handle overlap later by looking ahead one note step.
+    notes.push({startTick:start, endTick:end, pitch, vel, stepIndex:i});
+    i = endStep;
+  }
+
+  // Apply slide overlaps
+  for (let n=1; n<notes.length; n++){
+    const prev = notes[n-1];
+    const destStep = notes[n].stepIndex;
+    if (pat.slides[destStep]) {
+      const destStart = notes[n].startTick;
+      prev.endTick = Math.max(prev.endTick, destStart + overlapTicks);
+    }
+  }
+
+  // Convert to MIDI on/off messages
+  const evs = [];
+  for (const n of notes){
+    const p = n.pitch & 127;
+    const v = n.vel & 127;
+    evs.push({t:n.startTick, bytes: new Uint8Array([0x90, p, v])});
+    // Note-off
+    evs.push({t:n.endTick,   bytes: new Uint8Array([0x80, p, 0])});
+  }
+  return { evs, ppq };
+}
+
+/* -------------------------- 8-bar phrase mutation ----------------------- */
+function mutateLoop(rng, base, locks, varyPct, keyName, scaleName, adv){
+  const out = JSON.parse(JSON.stringify(base));
+  const steps = out.mask.length;
+  const v = varyPct/100;
+  const flips = clamp(Math.round(1 + v*4), 1, 6);
+
+  if (!locks.rhythm) {
+    for (let k=0;k<flips;k++){
+      const i = randInt(rng, 0, steps-1);
+      if (out.mask[i]==="rest") out.mask[i]="note";
+      else if (out.mask[i]==="note") out.mask[i]="rest";
+    }
+    for (let b=0; b<steps/16; b++){
+      const s=b*16;
+      if (rng()<0.7 && out.mask[s]==="rest") out.mask[s]="note";
+    }
+  }
+
+  if (!locks.notes) {
+    const pool = buildNotePool(keyName, scaleName, adv.octRange, 3);
+    for (let k=0;k<flips;k++){
+      const i = randInt(rng, 0, steps-1);
+      if (out.mask[i]!=="note") continue;
+      const prev = (i>0 && out.pitches[i-1]!=null) ? out.pitches[i-1] : out.pitches[i];
+      const candidates = pool.map(n=>({n,d:Math.abs(n-prev)})).sort((a,b)=>a.d-b.d);
+      const near = candidates.slice(0,6).map(x=>x.n);
+      out.pitches[i] = choice(rng, near.length?near:pool);
+    }
+  }
+
+  if (!locks.accents) for (let k=0;k<flips;k++){
+    const i = randInt(rng, 0, steps-1);
+    if (out.mask[i]==="note") out.accents[i] = !out.accents[i];
+  }
+
+  if (!locks.slides) for (let k=0;k<flips;k++){
+    const i = randInt(rng, 1, steps-1);
+    if (out.mask[i]==="note") out.slides[i] = !out.slides[i];
+  }
+
+  if (!locks.ties) {
+    for (let k=0;k<flips;k++){
+      const i = randInt(rng, 1, steps-1);
+      if (out.mask[i]==="note" && (out.mask[i-1]==="note" || out.mask[i-1]==="tie")) {
+        out.mask[i] = (rng()<0.5) ? "tie" : "note";
+      }
+    }
+    for (let b=0;b<steps/16;b++){
+      const s=b*16;
+      if (out.mask[s]==="tie") out.mask[s]="note";
+    }
+  }
+
+  return out;
+}
+
+function buildPhrase8Bars(rng, baseLoop, locks, varyPct, keyName, scaleName, adv){
+  const segs = [];
+  const A = baseLoop;
+  segs.push(A);
+  segs.push(mutateLoop(rng, A, locks, varyPct*0.75, keyName, scaleName, adv));
+  segs.push(mutateLoop(rng, A, locks, varyPct*0.85, keyName, scaleName, adv));
+  const B = mutateLoop(rng, A, locks, varyPct*1.15, keyName, scaleName, adv);
+  segs.push(B);
+  segs.push(A);
+  segs.push(mutateLoop(rng, A, locks, varyPct*0.75, keyName, scaleName, adv));
+  segs.push(mutateLoop(rng, B, locks, varyPct*1.05, keyName, scaleName, adv));
+  segs.push(mutateLoop(rng, A, locks, varyPct*0.9, keyName, scaleName, adv));
+
+  const loopBars = Math.round(baseLoop.mask.length / 16);
+  const segCount = Math.floor(8 / loopBars);
+  const out = { mask:[], pitches:[], accents:[], slides:[] };
+  for (let i=0;i<segCount;i++){
+    const s = segs[i % segs.length];
+    out.mask.push(...s.mask);
+    out.pitches.push(...s.pitches);
+    out.accents.push(...s.accents);
+    out.slides.push(...s.slides);
+  }
+  return out;
+}
+
+/* -------------------------- Candidate management ------------------------- */
+let candidates = [];
+let selected = null;
+
+function getLocks() {
+  return {
+    key: el("lockKey").checked,
+    rhythm: el("lockRhythm").checked,
+    notes: el("lockNotes").checked,
+    motif: el("lockMotif").checked,
+    accents: el("lockAccents").checked,
+    slides: el("lockSlides").checked,
+    ties: el("lockTies").checked
+  };
+}
+
+function readAdv() {
+  return {
+    notePoolMax: +el("notePoolMax").value,
+    octRange: +el("octRange").value,
+    octJump: +el("octJump").value,
+    rootGrav: +el("rootGrav").value,
+    accDen: +el("accDen").value,
+    sldDen: +el("sldDen").value,
+    couple: +el("couple").value,
+    tieDen: +el("tieDen").value,
+    gateStyle: el("gateStyle").value,
+    motifLen: +el("motifLen").value,
+    motifRep: +el("motifRep").value,
+    motifVar: +el("motifVar").value,
+    cadBias: +el("cadBias").value
+  };
+}
+
+function gatherSettings() {
+  return {
+    styleName: el("styleDNA").value,
+    rhythmName: el("rhythmDNA").value,
+    keyName: el("key").value,
+    scaleName: el("scale").value,
+    tempo: +el("tempo").value,
+    bars: +el("bars").value,
+    vary: +el("vary").value,
+    swing: +el("swing").value,
+    slideMs: +el("slideMs").value,
+    tries: +el("tries").value,
+    candCount: +el("candCount").value,
+    adv: readAdv()
+  };
+}
+
+function buildOneCandidate(rng, settings, locks, frozen) {
+  const steps = settings.bars * 16;
+
+  const baseStyle = STYLE_DNA[settings.styleName];
+  const baseRhythm = RHYTHM_DNA[settings.rhythmName];
+
+  let style = clampStyle(applyVary(rng, baseStyle, settings.vary));
+  let rhythm = clampRhythm(applyVary(rng, baseRhythm, settings.vary));
+
+  // user intent overrides
+  style = {
+    ...style,
+    notePoolMax: settings.adv.notePoolMax,
+    octJump: settings.adv.octJump,
+    rootGrav: settings.adv.rootGrav,
+    accDen: settings.adv.accDen,
+    sldDen: settings.adv.sldDen,
+    couple: settings.adv.couple,
+    motifVar: settings.adv.motifVar,
+    cadBias: settings.adv.cadBias
+  };
+
+  // root note around octave 3
+  const rootNote = 12*(3+1) + NOTE_NAMES.indexOf(settings.keyName);
+
+  // motif (lockable)
+  let motifObj = (locks.motif && frozen?.motifObj) ? JSON.parse(JSON.stringify(frozen.motifObj)) : null;
+  if (!motifObj) {
+    const pool = buildNotePool(settings.keyName, settings.scaleName, settings.adv.octRange, 3);
+    motifObj = makeMotif(rng, pool, settings.adv.motifLen, style.notePoolMax, rootNote, style.rootGrav);
+  }
+
+  // rhythm
+  const tieMode = getTieMode();
+  const mask = (locks.rhythm && frozen?.mask)
+    ? frozen.mask.slice()
+    : makeRhythmMask(rng, steps, style, rhythm, settings.bars, tieMode, settings.adv.tieDen);
+
+  // pitches
+  const pitches = (locks.notes && frozen?.pitches)
+    ? frozen.pitches.slice()
+    : placePitches(rng, steps, mask, motifObj, settings.adv.motifRep, settings.adv.motifVar, rootNote, style.rootGrav,
+      style.octJump, settings.adv.octRange);
+
+  // accents & slides
+  const asFrozen = {
+    accents: (locks.accents && frozen?.accents) ? frozen.accents.slice() : null,
+    slides: (locks.slides && frozen?.slides) ? frozen.slides.slice() : null
+  };
+  const as = addAccentsSlides(rng, steps, mask, pitches, style.accDen, style.sldDen, style.couple, locks.accents, locks.slides, asFrozen);
+
+  const score = scorePattern(steps, mask, pitches, as.accents, as.slides);
+  return { mask, pitches, accents: as.accents, slides: as.slides, motifObj, score };
+}
+
+function renderCandidates(settings) {
+  const list = el("candList");
+  list.innerHTML = "";
+
+  const sorted = candidates.slice().sort((a,b)=>b.score-a.score);
+
+  for (let idx=0; idx<sorted.length; idx++){
+    const c = sorted[idx];
+    const div = document.createElement("div");
+    div.className = "cand";
+
+    const top = document.createElement("div");
+    top.className = "top";
+
+    const left = document.createElement("div");
+    left.innerHTML =
+      `<div class="mono">#${idx+1} <span class="pill">score ${c.score.toFixed(1)}</span></div>
+       <div class="tiny mono">notes:${c.mask.filter(x=>x==="note").length} ties:${c.mask.filter(x=>x==="tie").length} acc:${c.accents.filter(Boolean).length} sld:${c.slides.filter(Boolean).length}</div>`;
+
+    const right = document.createElement("div");
+    right.className = "btns";
+
+    const play = document.createElement("button");
+    play.textContent = "Play";
+    play.onclick = () => {
+      selected = c;
+      el("gridOut").textContent = renderStepGrid(selected, settings.bars);
+      playPreview(selected, settings.tempo, settings.swing, settings.slideMs);
+      el("dlLoopBtn").disabled = false;
+      el("dlPhraseBtn").disabled = false;
+    };
+
+    const pick = document.createElement("button");
+    pick.textContent = "Select";
+    pick.onclick = () => {
+      selected = c;
+      el("gridOut").textContent = renderStepGrid(selected, settings.bars);
+      el("dlLoopBtn").disabled = false;
+      el("dlPhraseBtn").disabled = false;
+      el("status").textContent = "Selected";
+    };
+
+    right.appendChild(play);
+    right.appendChild(pick);
+
+    top.appendChild(left);
+    top.appendChild(right);
+    div.appendChild(top);
+    list.appendChild(div);
+  }
+
+  const zipOk = (typeof JSZip !== "undefined") && candidates.length > 0;
+  el("dlZipBtn").disabled = !zipOk;
+  el("zipNote").innerHTML = zipOk
+    ? ""
+    : `<span class="warnTxt">ZIP disabled:</span> JSZip not available (offline/CDN blocked).`;
+}
+
+/* ------------------------------- Downloads ------------------------------ */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url), 2000);
+}
+function downloadMidiBytes(bytes, filename){
+  downloadBlob(new Blob([bytes], {type:"audio/midi"}), filename);
+}
+
+function makeLoopMidiBytes(pattern, settings) {
+  const { evs } = stepsToMidiEvents(pattern, settings.tempo, settings.swing, settings.slideMs, settings.adv.gateStyle);
+  return buildMidiType1(evs, settings.tempo, 480);
+}
+
+function makePhraseMidiBytes(baseLoop, settings) {
+  const locks = getLocks();
+  const seedStr = (el("seed").value || `${Date.now()}`) + "_phrase";
+  const rng = mulberry32(xmur3(seedStr)());
+
+  const phrase = buildPhrase8Bars(
+    rng,
+    baseLoop,
+    { rhythm: locks.rhythm, notes: locks.notes, accents: locks.accents, slides: locks.slides, ties: locks.ties },
+    settings.vary,
+    settings.keyName, settings.scaleName,
+    settings.adv
+  );
+
+  const { evs } = stepsToMidiEvents(phrase, settings.tempo, settings.swing, settings.slideMs, settings.adv.gateStyle);
+  return buildMidiType1(evs, settings.tempo, 480);
+}
+
+async function downloadZipCandidates(settings) {
+  if (typeof JSZip === "undefined") return;
+  const zip = new JSZip();
+
+  const meta = {
+    generatedAt: new Date().toISOString(),
+    styleDNA: settings.styleName,
+    rhythmDNA: settings.rhythmName,
+    key: settings.keyName,
+    scale: settings.scaleName,
+    tempo: settings.tempo,
+    bars: settings.bars,
+    vary: settings.vary,
+    swing: settings.swing,
+    slideOverlapMs: settings.slideMs,
+    advanced: settings.adv
+  };
+  zip.file("meta.json", JSON.stringify(meta, null, 2));
+
+  const sorted = candidates.slice().sort((a,b)=>b.score-a.score);
+  for (let i=0;i<sorted.length;i++){
+    const c = sorted[i];
+    const bytes = makeLoopMidiBytes(c, settings);
+    zip.file(`candidate_${String(i+1).padStart(2,"0")}_loop.mid`, bytes);
+    zip.file(`candidate_${String(i+1).padStart(2,"0")}_grid.txt`, renderStepGrid(c, settings.bars));
+  }
+
+  const blob = await zip.generateAsync({type:"blob"});
+  downloadBlob(blob, "acidliner_candidates.zip");
+}
+
+/* ------------------------------ Wire buttons ---------------------------- */
+el("stopBtn").addEventListener("click", stopPreview);
+
+el("genBtn").addEventListener("click", () => {
+  const settings = gatherSettings();
+  const locks = getLocks();
+
+  const seedStr = el("seed").value || `${Date.now()}_${Math.random()}`;
+  const rng = mulberry32(xmur3(seedStr)());
+
+  // freeze from currently selected candidate if locks enabled
+  const frozen = selected ? {
+    mask: selected.mask,
+    pitches: selected.pitches,
+    motifObj: selected.motifObj,
+    accents: selected.accents,
+    slides: selected.slides
+  } : null;
+
+  el("status").textContent = "Generating…";
+  candidates = [];
+  selected = null;
+  el("dlLoopBtn").disabled = true;
+  el("dlPhraseBtn").disabled = true;
+
+  const pool = [];
+  for (let t=0;t<settings.tries;t++){
+    const c = buildOneCandidate(rng, settings, locks, frozen);
+    pool.push(c);
+  }
+  pool.sort((a,b)=>b.score-a.score);
+  candidates = pool.slice(0, settings.candCount);
+
+  if (candidates.length) {
+    selected = candidates[0];
+    el("gridOut").textContent = renderStepGrid(selected, settings.bars);
+    el("dlLoopBtn").disabled = false;
+    el("dlPhraseBtn").disabled = false;
+  }
+
+  el("status").textContent = `Ready (${candidates.length} candidates)`;
+  renderCandidates(settings);
+});
+
+el("dlLoopBtn").addEventListener("click", () => {
+  const settings = gatherSettings();
+  if (!selected) return;
+  const bytes = makeLoopMidiBytes(selected, settings);
+  const name = `acidliner_loop_${settings.keyName}_${settings.scaleName.replace(/\W+/g,"_")}_${settings.tempo}bpm.mid`;
+  downloadMidiBytes(bytes, name);
+});
+
+el("dlPhraseBtn").addEventListener("click", () => {
+  const settings = gatherSettings();
+  if (!selected) return;
+  const bytes = makePhraseMidiBytes(selected, settings);
+  const name = `acidliner_phrase8_${settings.keyName}_${settings.scaleName.replace(/\W+/g,"_")}_${settings.tempo}bpm.mid`;
+  downloadMidiBytes(bytes, name);
+});
+
+el("dlZipBtn").addEventListener("click", async () => {
+  const settings = gatherSettings();
+  if (!candidates.length) return;
+  await downloadZipCandidates(settings);
+});
+</script>
+</body>
+</html>
